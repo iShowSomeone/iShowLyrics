@@ -1,0 +1,191 @@
+#!/usr/bin/env bash
+# =============================================================================
+#  ishowlyrics - control the iShowLyrics desktop widget from the terminal
+#  Author: iShowSomeone    Version: 1.0.1
+#
+#    ishowlyrics start | stop | restart | status
+#    ishowlyrics pin [override]     keep the widget above other windows
+#    ishowlyrics unpin              put it back on the base layer (default)
+#    ishowlyrics reset [layer]      widget invisible? restart it cleanly on the base layer
+#    ishowlyrics config             change your settings (new answers become the defaults)
+#    ishowlyrics verify             check that the installation is intact
+#    ishowlyrics doctor             diagnose problems and suggest fixes
+#    ishowlyrics probe              measure how accurately your player reports the song position
+#    ishowlyrics env                show the detected desktop and the window layer used
+#    ishowlyrics autostart on|off   start at login
+#    ishowlyrics uninstall | version | help
+# =============================================================================
+SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+ISL_HOME="$(dirname "$SELF")"
+export ISL_HOME
+# shellcheck source=lib.sh
+source "$ISL_HOME/lib.sh" || { echo "ishowlyrics: cannot load $ISL_HOME/lib.sh" >&2; exit 1; }
+
+usage() {
+  cat <<EOF
+${B}ishowlyrics${N} $ISL_VERSION - synced lyrics on your desktop
+
+  ${B}ishowlyrics start${N}            start the widget
+  ${B}ishowlyrics stop${N}             stop the widget
+  ${B}ishowlyrics restart${N}          apply changes you made to the config files
+  ${B}ishowlyrics status${N}           what is running, what is playing
+
+  ${B}ishowlyrics pin${N} [override]   keep the widget above other windows (browser, editor, ...)
+  ${B}ishowlyrics unpin${N}            back to the base layer (the default)
+  ${B}ishowlyrics reset${N} [layer]    widget invisible? clean restart on the base layer.
+                              layer: auto | desktop | below | override (saved)
+
+  ${B}ishowlyrics config${N}           change your settings; your answers become the new defaults
+  ${B}ishowlyrics verify${N}           check the installation, then offer to change settings
+  ${B}ishowlyrics doctor${N}           find out why something doesn't work, with suggested fixes
+  ${B}ishowlyrics probe${N} [seconds]  measure how accurately your player reports the song position
+  ${B}ishowlyrics env${N}              detected desktop and the window layer in use
+  ${B}ishowlyrics autostart${N} on|off start the widget at login
+  ${B}ishowlyrics uninstall${N}        remove iShowLyrics
+
+Files live in $ISL_HOME
+EOF
+}
+
+need_install() { isl_installed || die "iShowLyrics is not installed in $ISL_HOME. Run ./install.sh first."; }
+
+cmd_start() {
+  need_install
+  if [[ ${1:-} == --autostart ]]; then wait_session_ready; fi
+  if isl_conky_running && isl_daemon_running; then
+    say "iShowLyrics is already running. Use 'ishowlyrics restart' to reload it."; return 0
+  fi
+  isl_start
+  if isl_conky_running; then ok "iShowLyrics started. Play a song to see the lyrics."
+  else warn "Conky did not start. Run 'ishowlyrics doctor' to find out why."; fi
+}
+
+cmd_stop() { isl_stop; ok "iShowLyrics stopped."; }
+
+cmd_restart() {
+  need_install
+  isl_start
+  if isl_conky_running; then ok "iShowLyrics restarted."
+  else warn "Conky did not start. Run 'ishowlyrics doctor' to find out why."; fi
+}
+
+cmd_status() {
+  need_install
+  load_settings
+  printf '%siShowLyrics %s%s\n' "$B" "$ISL_VERSION" "$N"
+  if isl_conky_running;  then ok "Widget : running"; else warn "Widget : not running  (ishowlyrics start)"; fi
+  if isl_daemon_running; then ok "Helper : running"; else warn "Helper : not running  (ishowlyrics start)"; fi
+  case "$PIN_MODE" in
+    "")       say "  Pin    : off (base layer: $(resolve_layer))" ;;
+    *)        say "  Pin    : ON - above other windows (mode: $PIN_MODE)" ;;
+  esac
+  say "  Autostart : $([[ -f $ISL_AUTOSTART ]] && echo on || echo off)"
+  if have playerctl && [[ -f $ISL_HOME/lyrics.py ]]; then
+    say "  Detected :"
+    python3 "$ISL_HOME/lyrics.py" --once 2>/dev/null | sed 's/^/    /'
+  fi
+}
+
+cmd_pin() {
+  need_install
+  local mode="${1:-normal}"
+  case "$mode" in normal|override) ;; *) die "Usage: ishowlyrics pin [override]" ;; esac
+  load_settings
+  PIN_MODE="$mode"
+  save_settings
+  apply_layer
+  if isl_conky_running; then isl_start; fi
+  ok "Pinned on top (mode: $mode). Mouse clicks pass through the widget. Undo with: ishowlyrics unpin"
+  if [[ $mode == normal ]]; then
+    note "If it does not stay above your windows, try: ishowlyrics pin override"
+  fi
+}
+
+cmd_unpin() {
+  need_install
+  load_settings
+  PIN_MODE=""
+  save_settings
+  apply_layer
+  if isl_conky_running; then isl_start; fi
+  ok "Unpinned: the widget is back on the base layer ($(resolve_layer))."
+}
+
+# The widget is running but you cannot see it: start over on the base layer.
+cmd_reset() {
+  need_install
+  load_settings
+  local want="${1:-}"
+  case "$want" in ""|auto|desktop|below|override) ;; *) die "Usage: ishowlyrics reset [auto|desktop|below|override]" ;; esac
+  step "Resetting the widget"
+  isl_stop
+  rm -rf "$ISL_RUN"
+  PIN_MODE=""
+  if [[ -n $want ]]; then LAYER="$want"; fi
+  save_settings
+  apply_layer
+  ok "Back on the base layer: $(resolve_layer)  (setting: $LAYER)"
+  isl_start
+  sleep 3
+  if ! isl_conky_running; then
+    warn "Conky did not start. Run: ishowlyrics doctor"; return 0
+  fi
+  case "$(python3 "$ISL_HOME/clickthrough.py" check 2>&1; echo "rc=$?")" in
+    *"rc=2"*) warn "Conky is running but its window was not found yet (wait a few seconds, or run: ishowlyrics doctor)" ;;
+    *)        ok "The widget window exists. Play a song to see the lyrics." ;;
+  esac
+  note "Still invisible? Try another base layer, one at a time (each one is saved):"
+  note "  ishowlyrics reset desktop     ishowlyrics reset below     ishowlyrics reset override"
+  note "and 'ishowlyrics reset auto' goes back to the automatic choice."
+}
+
+cmd_env() {
+  need_install
+  load_settings
+  printf '%siShowLyrics %s - environment%s\n' "$B" "$ISL_VERSION" "$N"
+  env_tips
+}
+
+cmd_probe() {
+  need_install
+  exec python3 "$ISL_HOME/lyrics.py" --probe "${1:-15}"
+}
+
+cmd_autostart() {
+  need_install
+  load_settings
+  case "${1:-}" in
+    on)  AUTOSTART=1 ;;
+    off) AUTOSTART=0 ;;
+    *)   die "Usage: ishowlyrics autostart on|off" ;;
+  esac
+  save_settings
+  sync_autostart
+  ok "Autostart is now ${1}."
+}
+
+cmd_uninstall() {
+  init_tty
+  do_uninstall
+  exit 0
+}
+
+case "${1:-help}" in
+  start)            shift; cmd_start "$@" ;;
+  stop)             cmd_stop ;;
+  restart)          cmd_restart ;;
+  status)           cmd_status ;;
+  pin)              shift; cmd_pin "$@" ;;
+  unpin)            cmd_unpin ;;
+  reset)            shift; cmd_reset "$@" ;;
+  env)              cmd_env ;;
+  probe)            shift; cmd_probe "$@" ;;
+  config)           need_install; exec bash "$ISL_HOME/verify.sh" --configure ;;
+  verify)           need_install; shift; exec bash "$ISL_HOME/verify.sh" "$@" ;;
+  doctor)           need_install; shift; exec bash "$ISL_HOME/doctor.sh" "$@" ;;
+  autostart)        shift; cmd_autostart "$@" ;;
+  uninstall)        cmd_uninstall ;;
+  version|-v|--version) echo "iShowLyrics $ISL_VERSION by $ISL_AUTHOR" ;;
+  help|-h|--help)   usage ;;
+  *)                echo "Unknown command: $1" >&2; echo >&2; usage >&2; exit 1 ;;
+esac
