@@ -1,5 +1,12 @@
 # iShowLyrics
 
+<img width="1916" height="1034" alt="Screenshot From 2026-10-06 17-41-56" src="https://github.com/user-attachments/assets/4255b479-aefb-4e73-a5c4-cc42c663d813" />
+
+<img width="1920" height="958" alt="Screenshot From 2026-10-06 22-56-40" src="https://github.com/user-attachments/assets/98eea17e-a0e0-4fb9-bc25-dbdda3ed51ed" />
+
+<img width="1837" height="1028" alt="Screenshot From 2026-10-09 15-52-04" src="https://github.com/user-attachments/assets/1c7403bf-3071-4c86-abda-8c8f9d8a74f1" />
+
+
 Synced, animated lyrics on your Linux desktop. iShowLyrics is a [Conky](https://github.com/brndnmtthws/conky) widget that follows whatever you are playing (Spotify, GNOME Music, a browser tab, VLC, ...) and shows the current lyric line with smooth scrolling, the song title and artist underneath, and an optional karaoke sweep.
 
 - Works with any player that supports MPRIS (anything `playerctl` can see)
@@ -31,9 +38,15 @@ The installer checks all of these and offers to install what is missing (apt, dn
 ## Install
 
 ```bash
-git clone https://github.com/iShowSomeone/iShowLyrics.git
-cd iShowLyrics
+git clone https://github.com/iShowSomeone/iShowLyrics.git iShowLyrics-src
+cd iShowLyrics-src
 bash install.sh
+```
+
+The name at the end of the clone command keeps the download in `iShowLyrics-src`, separate from `~/iShowLyrics`, where the widget is installed. Afterwards you can delete `iShowLyrics-src`, or keep it to update later:
+
+```bash
+cd iShowLyrics-src && git pull && bash install.sh
 ```
 
 The installer asks where the widget should appear, which font, size and colours to use, and so on. Press Enter to accept the answer shown in brackets. Everything is installed into `~/iShowLyrics` and a command called `ishowlyrics` is added. If `~/.local/bin` is not on your PATH yet, the installer offers to add it; open a new terminal afterwards.
