@@ -1,10 +1,7 @@
 # iShowLyrics
 
-<img width="1916" height="1034" alt="Screenshot From 2026-10-06 17-41-56" src="https://github.com/user-attachments/assets/4255b479-aefb-4e73-a5c4-cc42c663d813" />
-
-<img width="1920" height="958" alt="Screenshot From 2026-10-06 22-56-40" src="https://github.com/user-attachments/assets/98eea17e-a0e0-4fb9-bc25-dbdda3ed51ed" />
-
 <img width="1837" height="1028" alt="Screenshot From 2026-10-09 15-52-04" src="https://github.com/user-attachments/assets/1c7403bf-3071-4c86-abda-8c8f9d8a74f1" />
+iShowLyrics in CachyOS (KDE)
 
 
 Synced, animated lyrics on your Linux desktop. iShowLyrics is a [Conky](https://github.com/brndnmtthws/conky) widget that follows whatever you are playing (Spotify, GNOME Music, a browser tab, VLC, ...) and shows the current lyric line with smooth scrolling, the song title and artist underneath, and an optional karaoke sweep.
